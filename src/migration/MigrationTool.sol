@@ -26,14 +26,27 @@ struct InitializationParams {
     address[] collateralAddresses;
 }
 
+struct PreviewParams {
+    IAlchemistV2State.YieldTokenParams startingParams;
+    IAlchemistV2State.YieldTokenParams targetParams;
+    int256 currentDebt;
+    uint256 underlyingValue;
+    uint256 newShares;
+    uint256 debtTokenValue;
+    uint256 newDebtTokenValue;
+    uint256 remainingDebt;
+}
+
 contract MigrationTool is IMigrationTool, Multicall {
     string public override version = "1.0.1";
-    uint256 FIXED_POINT_SCALAR = 1e18;
+    uint256 public immutable FIXED_POINT_SCALAR = 1e18;
+    uint256 public immutable BPS = 10000;
 
     mapping(address => uint256) public decimals;
 
     IAlchemistV2 public immutable alchemist;
     IAlchemicToken public immutable alchemicToken;
+
     address[] public collateralAddresses;
 
     constructor(InitializationParams memory params) {
@@ -48,6 +61,59 @@ contract MigrationTool is IMigrationTool, Multicall {
         }
     }
 
+    /// @inheritdoc IMigrationTool
+    function previewMigration(      
+        address account,
+        address startingYieldToken,
+        address targetYieldToken,
+        uint256 shares
+    ) external view returns (bool, string memory, uint256, uint256, uint256) {
+        PreviewParams memory params;
+
+        params.startingParams = alchemist.getYieldTokenParameters(startingYieldToken);
+        params.targetParams = alchemist.getYieldTokenParameters(targetYieldToken);
+
+        // Calculate the amount of shares a user will receive in the new vault and the debt token value of both positions
+        params.underlyingValue = shares * alchemist.getUnderlyingTokensPerShare(startingYieldToken) / 10**TokenUtils.expectDecimals(startingYieldToken);
+        params.newShares = params.underlyingValue * 10**TokenUtils.expectDecimals(targetYieldToken) / alchemist.getUnderlyingTokensPerShare(targetYieldToken);
+        params.debtTokenValue = _convertToDebt(shares, startingYieldToken, params.startingParams.underlyingToken);
+        params.newDebtTokenValue = _convertToDebt(params.newShares, targetYieldToken, params.targetParams.underlyingToken);
+
+        // If attempting to move more shares than then new vault can accept
+        if ( params.targetParams.activeBalance + params.newShares  > params.targetParams.maximumExpectedValue) {
+            return (
+                false, 
+                "Migrated amount exceeds new vault capacity! Reduce migration amount.", 
+                params.targetParams.activeBalance + params.newShares - params.targetParams.maximumExpectedValue,
+                0,
+                0
+            );
+        }
+
+        // If debt new debt value is less than previous, check that the user has the ability to cover the difference
+        (params.currentDebt, ) = alchemist.accounts(account);
+        if (params.currentDebt > 0) {
+            params.remainingDebt = (alchemist.totalValue(account) * FIXED_POINT_SCALAR / alchemist.minimumCollateralization()) - uint256(params.currentDebt);
+            if (params.newDebtTokenValue < params.debtTokenValue && params.remainingDebt < params.debtTokenValue - params.newDebtTokenValue) {
+                return (
+                    false, 
+                    "Slippage exceeded! New position exceeds mint allowance.",
+                    params.debtTokenValue - params.newDebtTokenValue - params.remainingDebt,
+                    0,
+                    0
+                );
+            }
+        }
+
+        return (
+            true,
+            "Migration is ready!",
+            0,
+            params.newShares * 8500 / BPS,
+            params.underlyingValue * 8500 / BPS
+        );
+    }
+    
     /// @inheritdoc IMigrationTool
     function migrateVaults(
         address startingYieldToken,
@@ -111,7 +177,7 @@ contract MigrationTool is IMigrationTool, Multicall {
 	    return newPositionShares;
 	}
 
-    function _convertToDebt(uint256 shares, address yieldToken, address underlyingToken) internal returns(uint256) {
+    function _convertToDebt(uint256 shares, address yieldToken, address underlyingToken) internal view returns(uint256) {
         // Math safety
         if (TokenUtils.expectDecimals(underlyingToken) > 18) {
             revert IllegalState("Underlying token decimals exceeds 18");

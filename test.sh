@@ -1,7 +1,7 @@
 make test_file_block FILE=Autoleverage;
 make test_file_block FILE=EthAssetManager;
 make test_file_block FILE=FuseTokenAdapterV1;
-make test_file_block FILE=MigrationToolETH BLOCK=14677441;
+make test_file_block FILE=MigrationToolETH BLOCK=17116420;
 make test_file_block FILE=MigrationToolUSD BLOCK=14668199;
 make test_file_block FILE=RETHAdapterV1 BLOCK=15234464;
 make test_file_block FILE=ThreePoolAssetManager;
@@ -18,3 +18,7 @@ make test_file_block_optimism FILE=AaveV3TokenAdapter BLOCK=19744153;
 make test_file_block FILE=IdleTrancheAdapter BLOCK=15783014;
 make test_file_block FILE=TwoPoolAssetManager BLOCK=16435541;
 make test_file_block FILE=PoolAssetManager BLOCK=18418991;
+make test_file_block_optimism FILE=XTokens BLOCK=118506023;
+make test_file_block FILE=SDT BLOCK=17000429;
+make test_file_block_optimism FILE=YearnOptimism BLOCK=99207058;
+make test_file_block_optimism FILE=YTokenGateway BLOCK=99207058;

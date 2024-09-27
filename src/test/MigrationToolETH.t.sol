@@ -26,6 +26,8 @@ import {IAlchemistV2AdminActions} from "../interfaces/alchemist/IAlchemistV2Admi
 import {ILendingPool} from "../interfaces/external/aave/ILendingPool.sol";
 import {IWhitelist} from "../interfaces/IWhitelist.sol";
 
+import {console} from "../../lib/forge-std/src/console.sol";
+
 contract MigrationToolTestETH is DSTestPlus {
     address constant admin = 0x8392F6669292fA56123F71949B52d883aE57e225;
     address constant alchemistETH = 0x062Bf725dC4cDF947aa79Ca2aaCCD4F385b13b5c;
@@ -53,7 +55,7 @@ contract MigrationToolTestETH is DSTestPlus {
 
     function setUp() external {
         MigrationInitializationParams memory migrationParams = MigrationInitializationParams(alchemistETH, new address[](1));
-        migrationParams.collateralAddresses[0] = (0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        migrationParams.collateralAddresses[0] = (wETH);
         migrationToolETH = new MigrationTool(migrationParams);
 
         AlETH = IAlchemicToken(alETH);
@@ -207,6 +209,19 @@ contract MigrationToolTestETH is DSTestPlus {
         // Verify old position is gone
         (sharesConfirmed, ) = AlchemistETH.positions(address(this), yvETH);
         assertEq(0, sharesConfirmed);
+    }
+
+    function testPreviewMigrate() external {
+        (bool canMigrate, string memory flag, uint256 amountToAdjust, , ) = migrationToolETH.previewMigration(0x15962221e0E7A41dE9Da1615f9cb64cBfFF83408, 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0, 0xac3E018457B222d93114458476f3E3416Abbe38F, 9940160709247927545);
+
+        assertEq(canMigrate, false);
+        assertEq("Slippage exceeded! New position exceeds mint allowance.", flag);
+        assertGt(amountToAdjust, 0);
+
+        (canMigrate, flag, amountToAdjust, , ) = migrationToolETH.previewMigration(0x15962221e0E7A41dE9Da1615f9cb64cBfFF83408, 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0, 0xa258C4606Ca8206D8aA700cE2143D7db854D168c, 1000000e18);
+
+        assertEq(canMigrate, false);
+        assertEq("Migrated amount exceeds new vault capacity! Reduce migration amount.", flag);
     }
 
     function addAdapter(address alchemist, address aToken, address underlyingToken, string memory symbol, string memory name) public {

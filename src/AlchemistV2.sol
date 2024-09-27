@@ -518,19 +518,6 @@ contract AlchemistV2 is IAlchemistV2, Initializable, Multicall, Mutex {
     }
 
     /// @inheritdoc IAlchemistV2AdminActions
-    function sweepRewardTokens(address rewardToken, address yieldToken) external override lock {
-        _onlyKeeper();
-
-        if (_supportedYieldTokens.contains(rewardToken) || _supportedUnderlyingTokens.contains(rewardToken)) {
-            revert UnsupportedToken(rewardToken);
-        }
-
-        msg.sender.delegatecall(abi.encodeWithSignature("claim(address)", yieldToken));
-
-        TokenUtils.safeTransfer(rewardToken, msg.sender, TokenUtils.safeBalanceOf(rewardToken, address(this)));
-    }
-
-    /// @inheritdoc IAlchemistV2AdminActions
     function setTransferAdapterAddress(address transferAdapterAddress) external override lock {
         _onlyAdmin();
         transferAdapter = transferAdapterAddress;
@@ -893,6 +880,9 @@ contract AlchemistV2 is IAlchemistV2, Initializable, Multicall, Mutex {
 
         // Inform the transmuter that it has received tokens.
         IERC20TokenReceiver(transmuter).onERC20Received(underlyingToken, amountUnderlyingTokens);
+
+        // In the case that slippage allowed by minimumAmountOut would create an undercollateralized position
+        _validate(msg.sender);
 
         emit Liquidate(msg.sender, yieldToken, underlyingToken, actualShares, credit);
 
